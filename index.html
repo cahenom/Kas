@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Iuran Pemuda Pemudi</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif}
+body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.app{background:#fff;width:100%;max-width:420px;min-height:100vh;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,.08)}
+.header{background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;padding:22px 18px;border-bottom-left-radius:25px;border-bottom-right-radius:25px;text-align:center}
+.header h1{font-size:18px;margin-bottom:8px;font-weight:500}
+.balance{font-size:30px;font-weight:700}
+.stats{display:flex;justify-content:space-between;margin-top:12px}
+.stat{flex:1;margin:0 5px;padding:10px;border-radius:10px;background:rgba(255,255,255,.12);text-align:center}
+.stat h3{font-size:12px;margin-bottom:6px;font-weight:400}
+.stat p{font-size:15px;font-weight:600}
+.in{color:#16a34a}.out{color:#dc2626}
+.content{flex:1;padding:18px;overflow-y:auto}
+.chart-container{margin:12px 0;width:100%;height:150px}
+.transactions h2{font-size:15px;margin-bottom:10px;color:#333}
+.tx{display:flex;justify-content:space-between;padding:10px;margin-bottom:8px;border-radius:8px;background:#f8fafc}
+.tx .name{font-weight:500}
+.tx .amount{font-weight:700}
+.tx.in .amount{color:#16a34a}.tx.out .amount{color:#dc2626}
+.navbar{display:flex;justify-content:space-around;align-items:center;padding:10px 0;background:#fff;border-top:1px solid #e5e7eb}
+.nav-item{text-align:center;flex:1;font-size:13px;color:#666;cursor:pointer}
+.nav-item.active{color:#4f46e5;font-weight:600}
+.nav-item span{display:block;font-size:20px;margin-bottom:4px}
+.page{display:none}.page.active{display:block}
+.profile-card{text-align:center;margin-top:18px}
+.profile-card img{width:72px;height:72px;border-radius:50%;margin-bottom:10px}
+.small{font-size:13px;color:#666}
+.btn{display:block;width:100%;padding:11px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:10px}
+#btnBayar{background:#10b981}
+#btnLogout{background:#ef4444}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Total Dana Kas</h1>
+    <div class="balance" id="balance">Rp 0</div>
+    <div class="stats">
+      <div class="stat"><h3>Uang Masuk</h3><p class="in" id="totalIn">Rp 0</p></div>
+      <div class="stat"><h3>Uang Keluar</h3><p class="out" id="totalOut">Rp 0</p></div>
+    </div>
+    <button class="btn" id="btnBayar">Bayar Iuran</button>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <!-- HOME -->
+    <div id="page-home" class="page active">
+      <div class="chart-container"><canvas id="financeChart"></canvas></div>
+      <div class="transactions">
+        <h2>Riwayat Transaksi Semua Member</h2>
+        <div id="txListAll">Memuat...</div>
+      </div>
+    </div>
+
+    <!-- TRANSAKSI USER -->
+    <div id="page-riwayat" class="page">
+      <h2>Riwayat Transaksi Anda</h2>
+      <div id="txList">Silakan login untuk melihat transaksi</div>
+    </div>
+
+    <!-- PROFIL / LOGIN -->
+    <div id="page-profil" class="page">
+      <div class="profile-card">
+        <img id="avatar" src="https://i.pravatar.cc/80" alt="avatar" />
+        <h3 id="displayName">Guest</h3>
+        <p id="loginStatus" class="small">Belum login</p>
+      </div>
+      <button class="btn" id="btnLoginGoogle">Login dengan Google</button>
+      <button class="btn" id="btnLogout" style="display:none">Logout</button>
+    </div>
+  </div>
+
+  <!-- NAVBAR -->
+  <div class="navbar">
+    <div class="nav-item active" data-page="page-home"><span>🏠</span>Home</div>
+    <div class="nav-item" data-page="page-riwayat"><span>📑</span>Transaksi</div>
+    <div class="nav-item" data-page="page-profil"><span>👤</span>Profil</div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+// CONFIG FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyA4JL799nXLjzqq-S48p_RwPQCnMPyOpg4",
+  authDomain: "kass-1895f.firebaseapp.com",
+  projectId: "kass-1895f",
+  storageBucket: "kass-1895f.firebasestorage.app",
+  messagingSenderId: "300074235508",
+  appId: "1:300074235508:web:0a01944054953528308321",
+  databaseURL: "https://kass-1895f-default-rtdb.firebaseio.com"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+
+// NAVIGASI
+const pages = document.querySelectorAll('.page');
+const navItems = document.querySelectorAll('.nav-item');
+navItems.forEach(item => item.addEventListener('click', ()=>{
+  navItems.forEach(i=>i.classList.remove('active'));
+  item.classList.add('active');
+  pages.forEach(p=>p.classList.remove('active'));
+  document.getElementById(item.dataset.page).classList.add('active');
+}));
+
+// CHART
+const ctx = document.getElementById('financeChart').getContext('2d');
+const chart = new Chart(ctx,{type:'doughnut',data:{labels:['Uang Masuk','Uang Keluar'],datasets:[{data:[0,0],backgroundColor:['#16a34a','#dc2626'],borderWidth:0}]},options:{cutout:'70%',plugins:{legend:{display:true,position:'bottom'}}}});
+
+const balanceEl = document.getElementById('balance');
+const totalInEl = document.getElementById('totalIn');
+const totalOutEl = document.getElementById('totalOut');
+const txListAll = document.getElementById('txListAll');
+const txList = document.getElementById('txList');
+const displayName = document.getElementById('displayName');
+const loginStatus = document.getElementById('loginStatus');
+const avatar = document.getElementById('avatar');
+const btnLogout = document.getElementById('btnLogout');
+
+// LOGIN GOOGLE
+document.getElementById('btnLoginGoogle').addEventListener('click', async ()=>{
+  try{await signInWithPopup(auth,provider);}catch(err){alert(err.message);}
+});
+btnLogout.addEventListener('click', async ()=>{await signOut(auth);});
+
+// --- DASHBOARD: TOTAL KAS + RIWAYAT SEMUA MEMBER ---
+onValue(ref(db,'transactions'), snapshot=>{
+  const allData = snapshot.val()||{};
+  let totalIn=0, totalOut=0;
+  txListAll.innerHTML='';
+  for(let uid in allData){
+    for(let txid in allData[uid]){
+      const tx = allData[uid][txid];
+      if(tx.type==='in') totalIn+=tx.amount; else totalOut+=tx.amount;
+      const div=document.createElement('div');
+      div.className='tx '+tx.type;
+      div.innerHTML=`<span class="name">${tx.name}</span>
+                      <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
+      txListAll.appendChild(div);
+    }
+  }
+  balanceEl.innerText='Rp '+(totalIn-totalOut).toLocaleString();
+  totalInEl.innerText='Rp '+totalIn.toLocaleString();
+  totalOutEl.innerText='Rp '+totalOut.toLocaleString();
+  chart.data.datasets[0].data=[totalIn,totalOut];
+  chart.update();
+});
+
+// --- USER AUTH STATE & RIWAYAT SENDIRI ---
+let userTxRef = null;
+onAuthStateChanged(auth,user=>{
+  if(user){
+    displayName.innerText=user.displayName||user.email;
+    avatar.src=user.photoURL||'https://i.pravatar.cc/80';
+    loginStatus.innerText='Sudah login';
+    btnLogout.style.display='block';
+
+    userTxRef = ref(db,'transactions/'+user.uid);
+    onValue(userTxRef, snapshot=>{
+      const data = snapshot.val()||{};
+      txList.innerHTML='';
+      for(let id in data){
+        const tx = data[id];
+        const div=document.createElement('div');
+        div.className='tx '+tx.type;
+        div.innerHTML=`<span class="name">${tx.name}</span>
+                       <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
+        txList.appendChild(div);
+      }
+    });
+  } else {
+    displayName.innerText='Guest';
+    avatar.src='https://i.pravatar.cc/80';
+    loginStatus.innerText='Belum login';
+    btnLogout.style.display='none';
+    txList.innerHTML='Silakan login untuk melihat transaksi';
+  }
+});
+
+// --- BAYAR IURAN ---
+document.getElementById('btnBayar').addEventListener('click', async ()=>{
+  const user = auth.currentUser;
+  if(!user) return alert('Silakan login dulu!');
+  const nominal = parseInt(prompt("Masukkan nominal iuran"),10);
+  if(!nominal||nominal<=0)return alert('Nominal tidak valid!');
+  const txRef = push(ref(db,'transactions/'+user.uid));
+  await set(txRef,{name:'Iuran Bulanan',amount:nominal,type:'in',createdAt:Date.now()});
+  alert('Iuran berhasil dibayar Rp '+nominal.toLocaleString());
+});
+</script>
+</body>
+</html>
