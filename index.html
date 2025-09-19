@@ -25,6 +25,10 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
 .tx .name{font-weight:500}
 .tx .amount{font-weight:700}
 .tx.in .amount{color:#16a34a}.tx.out .amount{color:#dc2626}
+.events h2{font-size:15px;margin-bottom:10px;color:#333;margin-top:12px;}
+.event-item{display:flex;justify-content:space-between;padding:10px;margin-bottom:8px;border-radius:8px;background:#f0f4f8}
+.event-item .title{font-weight:500}
+.event-item .role{font-size:12px;color:#666}
 .navbar{display:flex;justify-content:space-around;align-items:center;padding:10px 0;background:#fff;border-top:1px solid #e5e7eb}
 .nav-item{text-align:center;flex:1;font-size:13px;color:#666;cursor:pointer}
 .nav-item.active{color:#4f46e5;font-weight:600}
@@ -36,6 +40,8 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
 .btn{display:block;width:100%;padding:11px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:10px}
 #btnBayar{background:#10b981}
 #btnLogout{background:#ef4444}
+#btnMakeAdmin{background:#f59e0b}
+#btnAddEvent{background:#4f46e5}
 </style>
 </head>
 <body>
@@ -56,6 +62,14 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
     <!-- HOME -->
     <div id="page-home" class="page active">
       <div class="chart-container"><canvas id="financeChart"></canvas></div>
+
+      <!-- Event / Pengumuman -->
+      <div class="events">
+        <h2>Event & Pengumuman</h2>
+        <div id="eventList">Memuat...</div>
+        <button class="btn" id="btnAddEvent" style="display:none">Tambah Event / Iuran</button>
+      </div>
+
       <div class="transactions">
         <h2>Riwayat Transaksi Semua Member</h2>
         <div id="txListAll">Memuat...</div>
@@ -77,6 +91,7 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
       </div>
       <button class="btn" id="btnLoginGoogle">Login dengan Google</button>
       <button class="btn" id="btnLogout" style="display:none">Logout</button>
+      <button class="btn" id="btnMakeAdmin" style="display:none">Jadikan Admin</button>
     </div>
   </div>
 
@@ -91,7 +106,7 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+import { getDatabase, ref, push, onValue, set, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 // CONFIG FIREBASE
 const firebaseConfig = {
@@ -101,7 +116,7 @@ const firebaseConfig = {
   storageBucket: "kass-1895f.firebasestorage.app",
   messagingSenderId: "300074235508",
   appId: "1:300074235508:web:0a01944054953528308321",
-  databaseURL: "https://kass-1895f-default-rtdb.asia-southeast1.firebasedatabase.app"
+  databaseURL: "https://kass-1895f-default-rtdb.firebaseio.com"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -121,7 +136,11 @@ navItems.forEach(item => item.addEventListener('click', ()=>{
 
 // CHART
 const ctx = document.getElementById('financeChart').getContext('2d');
-const chart = new Chart(ctx,{type:'doughnut',data:{labels:['Uang Masuk','Uang Keluar'],datasets:[{data:[0,0],backgroundColor:['#16a34a','#dc2626'],borderWidth:0}]},options:{cutout:'70%',plugins:{legend:{display:true,position:'bottom'}}}});
+const chart = new Chart(ctx,{
+  type:'doughnut',
+  data:{labels:['Uang Masuk','Uang Keluar'],datasets:[{data:[0,0],backgroundColor:['#16a34a','#dc2626'],borderWidth:0}]},
+  options:{cutout:'70%',plugins:{legend:{display:true,position:'bottom'}}}
+});
 
 const balanceEl = document.getElementById('balance');
 const totalInEl = document.getElementById('totalIn');
@@ -132,44 +151,34 @@ const displayName = document.getElementById('displayName');
 const loginStatus = document.getElementById('loginStatus');
 const avatar = document.getElementById('avatar');
 const btnLogout = document.getElementById('btnLogout');
+const btnMakeAdmin = document.getElementById('btnMakeAdmin');
+const btnBayar = document.getElementById('btnBayar');
+const eventList = document.getElementById('eventList');
+const btnAddEvent = document.getElementById('btnAddEvent');
 
 // LOGIN GOOGLE
-document.getElementById('btnLoginGoogle').addEventListener('click', async ()=>{
-  try{await signInWithPopup(auth,provider);}catch(err){alert(err.message);}
-});
+document.getElementById('btnLoginGoogle').addEventListener('click', async ()=>{try{await signInWithPopup(auth,provider);}catch(err){alert(err.message);}});
 btnLogout.addEventListener('click', async ()=>{await signOut(auth);});
 
-// --- DASHBOARD: TOTAL KAS + RIWAYAT SEMUA MEMBER ---
-onValue(ref(db,'transactions'), snapshot=>{
-  const allData = snapshot.val()||{};
-  let totalIn=0, totalOut=0;
-  txListAll.innerHTML='';
-  for(let uid in allData){
-    for(let txid in allData[uid]){
-      const tx = allData[uid][txid];
-      if(tx.type==='in') totalIn+=tx.amount; else totalOut+=tx.amount;
-      const div=document.createElement('div');
-      div.className='tx '+tx.type;
-      div.innerHTML=`<span class="name">${tx.name}</span>
-                      <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
-      txListAll.appendChild(div);
-    }
-  }
-  balanceEl.innerText='Rp '+(totalIn-totalOut).toLocaleString();
-  totalInEl.innerText='Rp '+totalIn.toLocaleString();
-  totalOutEl.innerText='Rp '+totalOut.toLocaleString();
-  chart.data.datasets[0].data=[totalIn,totalOut];
-  chart.update();
-});
-
-// --- USER AUTH STATE & RIWAYAT SENDIRI ---
+// --- AUTH & ROLE ---
 let userTxRef = null;
-onAuthStateChanged(auth,user=>{
+let currentRole = 'user';
+
+onAuthStateChanged(auth, async user=>{
   if(user){
     displayName.innerText=user.displayName||user.email;
     avatar.src=user.photoURL||'https://i.pravatar.cc/80';
     loginStatus.innerText='Sudah login';
     btnLogout.style.display='block';
+
+    // ambil role
+    const roleRef = ref(db,'users/'+user.uid+'/role');
+    onValue(roleRef, snapshot=>{
+      currentRole = snapshot.val() || 'user';
+      btnMakeAdmin.style.display = (currentRole==='admin')?'none':'block';
+      btnAddEvent.style.display = (currentRole==='admin')?'block':'none';
+      renderAllTransactions();
+    });
 
     userTxRef = ref(db,'transactions/'+user.uid);
     onValue(userTxRef, snapshot=>{
@@ -179,8 +188,8 @@ onAuthStateChanged(auth,user=>{
         const tx = data[id];
         const div=document.createElement('div');
         div.className='tx '+tx.type;
-        div.innerHTML=`<span class="name">${tx.name}</span>
-                       <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
+        div.innerHTML=`<span class="name">${tx.userName||tx.name}</span>
+                        <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
         txList.appendChild(div);
       }
     });
@@ -189,19 +198,105 @@ onAuthStateChanged(auth,user=>{
     avatar.src='https://i.pravatar.cc/80';
     loginStatus.innerText='Belum login';
     btnLogout.style.display='none';
+    btnMakeAdmin.style.display='none';
+    btnAddEvent.style.display='none';
     txList.innerHTML='Silakan login untuk melihat transaksi';
   }
 });
 
 // --- BAYAR IURAN ---
-document.getElementById('btnBayar').addEventListener('click', async ()=>{
+btnBayar.addEventListener('click', async ()=>{
   const user = auth.currentUser;
   if(!user) return alert('Silakan login dulu!');
+  if(currentRole!=='user') return alert('Hanya user biasa yang bisa bayar iuran');
+
   const nominal = parseInt(prompt("Masukkan nominal iuran"),10);
   if(!nominal||nominal<=0)return alert('Nominal tidak valid!');
+
   const txRef = push(ref(db,'transactions/'+user.uid));
-  await set(txRef,{name:'Iuran Bulanan',amount:nominal,type:'in',createdAt:Date.now()});
+  await set(txRef,{
+    name:'Iuran Bulanan',
+    userName: user.displayName || user.email,
+    amount: nominal,
+    type:'in',
+    createdAt:Date.now()
+  });
+
   alert('Iuran berhasil dibayar Rp '+nominal.toLocaleString());
+});
+
+// --- BUAT ADMIN ---
+btnMakeAdmin.addEventListener('click', async ()=>{
+  const user = auth.currentUser;
+  if(!user) return;
+  if(!confirm('Jadikan user ini sebagai Admin?')) return;
+  await update(ref(db,'users/'+user.uid),{role:'admin'});
+  alert('User sekarang Admin');
+  currentRole='admin';
+  renderAllTransactions();
+});
+
+// --- RENDER TRANSAKSI (ADMIN/USER) ---
+function renderAllTransactions(){
+  onValue(ref(db,'transactions'), snapshot=>{
+    const allData = snapshot.val()||{};
+    let totalIn=0, totalOut=0;
+    txListAll.innerHTML='';
+
+    for(let uid in allData){
+      for(let txid in allData[uid]){
+        const tx = allData[uid][txid];
+        if(currentRole==='user' && auth.currentUser.uid !== uid) continue;
+        if(tx.type==='in') totalIn+=tx.amount; else totalOut+=tx.amount;
+        const div=document.createElement('div');
+        div.className='tx '+tx.type;
+        div.innerHTML=`<span class="name">${tx.userName||tx.name}</span>
+                       <span class="amount">${tx.type==='in'?'+ ':'- '}Rp ${tx.amount.toLocaleString()}</span>`;
+        txListAll.appendChild(div);
+      }
+    }
+    balanceEl.innerText='Rp '+(totalIn-totalOut).toLocaleString();
+    totalInEl.innerText='Rp '+totalIn.toLocaleString();
+    totalOutEl.innerText='Rp '+totalOut.toLocaleString();
+    chart.data.datasets[0].data=[totalIn,totalOut];
+    chart.update();
+  });
+}
+
+// --- EVENT & PENGUMUMAN ---
+function renderEvents(){
+  onValue(ref(db,'events'), snapshot=>{
+    const data = snapshot.val()||{};
+    eventList.innerHTML='';
+    for(let id in data){
+      const ev = data[id];
+      const div = document.createElement('div');
+      div.className='event-item';
+      div.innerHTML=`<span class="title">${ev.title}</span>
+                     <span class="role">${ev.createdByRole}</span>`;
+      eventList.appendChild(div);
+    }
+  });
+}
+renderEvents();
+
+// Tambah Event (Admin)
+btnAddEvent.addEventListener('click', async ()=>{
+  const title = prompt("Masukkan judul event / iuran:");
+  if(!title) return;
+  const user = auth.currentUser;
+  if(!user) return;
+
+  const evRef = push(ref(db,'events'));
+  await set(evRef,{
+    title,
+    createdBy: user.uid,
+    createdByName: user.displayName || user.email,
+    createdByRole: currentRole,
+    createdAt: Date.now()
+  });
+
+  alert('Event berhasil ditambahkan');
 });
 </script>
 </body>
