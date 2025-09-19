@@ -41,7 +41,7 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
 #btnBayar{background:#10b981}
 #btnLogout{background:#ef4444}
 #btnMakeAdmin{background:#f59e0b}
-#btnAddEvent{background:#4f46e5}
+#btnAddEvent, #btnAddEventProfile{background:#4f46e5}
 </style>
 </head>
 <body>
@@ -92,6 +92,7 @@ body{background:#f5f7fa;color:#333;min-height:100vh;display:flex;align-items:cen
       <button class="btn" id="btnLoginGoogle">Login dengan Google</button>
       <button class="btn" id="btnLogout" style="display:none">Logout</button>
       <button class="btn" id="btnMakeAdmin" style="display:none">Jadikan Admin</button>
+      <button class="btn" id="btnAddEventProfile" style="display:none">Tambah Event / Iuran</button>
     </div>
   </div>
 
@@ -155,15 +156,16 @@ const btnMakeAdmin = document.getElementById('btnMakeAdmin');
 const btnBayar = document.getElementById('btnBayar');
 const eventList = document.getElementById('eventList');
 const btnAddEvent = document.getElementById('btnAddEvent');
+const btnAddEventProfile = document.getElementById('btnAddEventProfile');
+
+let userTxRef = null;
+let currentRole = 'user';
 
 // LOGIN GOOGLE
 document.getElementById('btnLoginGoogle').addEventListener('click', async ()=>{try{await signInWithPopup(auth,provider);}catch(err){alert(err.message);}});
 btnLogout.addEventListener('click', async ()=>{await signOut(auth);});
 
 // --- AUTH & ROLE ---
-let userTxRef = null;
-let currentRole = 'user';
-
 onAuthStateChanged(auth, async user=>{
   if(user){
     displayName.innerText=user.displayName||user.email;
@@ -177,9 +179,11 @@ onAuthStateChanged(auth, async user=>{
       currentRole = snapshot.val() || 'user';
       btnMakeAdmin.style.display = (currentRole==='admin')?'none':'block';
       btnAddEvent.style.display = (currentRole==='admin')?'block':'none';
+      btnAddEventProfile.style.display = (currentRole==='admin')?'block':'none';
       renderAllTransactions();
     });
 
+    // Riwayat user sendiri
     userTxRef = ref(db,'transactions/'+user.uid);
     onValue(userTxRef, snapshot=>{
       const data = snapshot.val()||{};
@@ -200,11 +204,12 @@ onAuthStateChanged(auth, async user=>{
     btnLogout.style.display='none';
     btnMakeAdmin.style.display='none';
     btnAddEvent.style.display='none';
+    btnAddEventProfile.style.display='none';
     txList.innerHTML='Silakan login untuk melihat transaksi';
   }
 });
 
-// --- BAYAR IURAN ---
+// --- BAYAR IURAN (USER) ---
 btnBayar.addEventListener('click', async ()=>{
   const user = auth.currentUser;
   if(!user) return alert('Silakan login dulu!');
@@ -236,7 +241,7 @@ btnMakeAdmin.addEventListener('click', async ()=>{
   renderAllTransactions();
 });
 
-// --- RENDER TRANSAKSI (ADMIN/USER) ---
+// --- RENDER SEMUA TRANSAKSI ---
 function renderAllTransactions(){
   onValue(ref(db,'transactions'), snapshot=>{
     const allData = snapshot.val()||{};
@@ -280,8 +285,11 @@ function renderEvents(){
 }
 renderEvents();
 
-// Tambah Event (Admin)
-btnAddEvent.addEventListener('click', async ()=>{
+// --- TAMBAH EVENT (ADMIN) ---
+btnAddEvent.addEventListener('click', addEventAdmin);
+btnAddEventProfile.addEventListener('click', addEventAdmin);
+
+async function addEventAdmin(){
   const title = prompt("Masukkan judul event / iuran:");
   if(!title) return;
   const user = auth.currentUser;
@@ -297,7 +305,7 @@ btnAddEvent.addEventListener('click', async ()=>{
   });
 
   alert('Event berhasil ditambahkan');
-});
+}
 </script>
 </body>
 </html>
